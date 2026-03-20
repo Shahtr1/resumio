@@ -3,5 +3,5 @@ spring:
     name: resumio
   data:
     redis:
-      host: localhost
+      host: redis
       port: 6379

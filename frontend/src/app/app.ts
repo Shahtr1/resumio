@@ -1,7 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, computed, signal } from '@angular/core';
 
-type UploadStageId = 'idle' | 'preparing' | 'initializing' | 'uploading' | 'finalizing' | 'completed';
+type UploadStageId =
+  | 'idle'
+  | 'preparing'
+  | 'initializing'
+  | 'uploading'
+  | 'finalizing'
+  | 'completed';
 
 type UploadStage = {
   id: UploadStageId;
@@ -40,7 +46,8 @@ export class App {
     {
       id: 'preparing',
       label: 'Prepare file',
-      description: 'The file is measured and split into smaller parts so the upload stays reliable.',
+      description:
+        'The file is measured and split into smaller parts so the upload stays reliable.',
       details: [
         'Your file is divided into manageable pieces before anything is sent.',
         'This makes large uploads smoother and easier to resume if something interrupts the process.',
@@ -212,16 +219,15 @@ export class App {
     return chunks;
   }
 
-  private initUpload(file: File): Promise<{ uploadId: string; chunkSize: number; totalChunks: number }> {
+  private initUpload(
+    file: File,
+  ): Promise<{ uploadId: string; chunkSize: number; totalChunks: number }> {
     return new Promise((resolve, reject) => {
       this.http
-        .post<{ uploadId: string; chunkSize: number; totalChunks: number }>(
-          'http://localhost:8080/upload/init',
-          {
-            fileName: file.name,
-            fileSize: file.size,
-          },
-        )
+        .post<{ uploadId: string; chunkSize: number; totalChunks: number }>('/upload/init', {
+          fileName: file.name,
+          fileSize: file.size,
+        })
         .subscribe({
           next: (response) => resolve(response),
           error: (error) => reject(error),
@@ -250,7 +256,7 @@ export class App {
         const hash = await this.sha256(chunk.blob);
 
         this.http
-          .put('http://localhost:8080/upload/chunk', chunk.blob, {
+          .put('/upload/chunk', chunk.blob, {
             headers: {
               uploadId,
               chunkIndex: chunk.index.toString(),
@@ -277,9 +283,13 @@ export class App {
 
     return new Promise((resolve, reject) => {
       this.http
-        .post(`http://localhost:8080/upload/complete?uploadId=${uploadId}&fileHash=${fileHash}`, {}, {
-          responseType: 'text',
-        })
+        .post(
+          `/upload/complete?uploadId=${uploadId}&fileHash=${fileHash}`,
+          {},
+          {
+            responseType: 'text',
+          },
+        )
         .subscribe({
           next: () => resolve(),
           error: (error) => reject(error),

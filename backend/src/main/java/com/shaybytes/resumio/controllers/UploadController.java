@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@CrossOrigin(origins = "http://localhost:4200")
+@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/upload")
 @RequiredArgsConstructor
@@ -28,7 +28,7 @@ public class UploadController {
             @RequestHeader String chunkHash,
             @RequestBody byte[] chunkData) {
 
-        uploadService.saveChunk(uploadId, chunkIndex,chunkHash, chunkData);
+        uploadService.saveChunk(uploadId, chunkIndex, chunkHash, chunkData);
         return ResponseEntity.ok().build();
     }
 
