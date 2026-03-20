@@ -1,52 +1,208 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Component, computed, signal } from '@angular/core';
+
+type UploadStageId = 'idle' | 'preparing' | 'initializing' | 'uploading' | 'finalizing' | 'completed';
+
+type UploadStage = {
+  id: UploadStageId;
+  label: string;
+  description: string;
+  details: string[];
+};
+
+type Chunk = {
+  index: number;
+  blob: Blob;
+};
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
 export class App {
-  title = signal('Resumio Upload');
+  readonly title = 'Resumio Upload';
+  readonly subtitle =
+    'Upload a file once and let the app handle chunking, transfer, and completion while keeping the user informed.';
+  readonly chunkSize = signal(5 * 1024 * 1024);
+  readonly selectedFile = signal<File | null>(null);
+  readonly uploadId = signal<string | null>(null);
+  readonly totalChunks = signal(0);
+  readonly uploadedChunks = signal(0);
+  readonly activeStage = signal<UploadStageId>('idle');
+  readonly expandedStage = signal<UploadStageId | null>('preparing');
+  readonly stageMessage = signal('Choose a file to begin.');
+  readonly isUploading = signal(false);
+  readonly errorMessage = signal('');
 
-  selectedFile: File | null = null;
-  chunkSize = 5 * 1024 * 1024; // 5MB
+  readonly stages: UploadStage[] = [
+    {
+      id: 'preparing',
+      label: 'Prepare file',
+      description: 'The file is measured and split into smaller parts so the upload stays reliable.',
+      details: [
+        'Your file is divided into manageable pieces before anything is sent.',
+        'This makes large uploads smoother and easier to resume if something interrupts the process.',
+        'The app calculates how many pieces are needed so the next steps can be planned clearly.',
+      ],
+    },
+    {
+      id: 'initializing',
+      label: 'Reserve upload',
+      description: 'The server opens a secure upload session and prepares a place for the file.',
+      details: [
+        'A unique upload ID is created so every file has its own tracked session.',
+        'The backend records how many chunks to expect and the file name being uploaded.',
+        'This lets the server keep progress organized while the transfer is happening.',
+      ],
+    },
+    {
+      id: 'uploading',
+      label: 'Transfer chunks',
+      description: 'Each chunk is uploaded one by one and checked before it is accepted.',
+      details: [
+        'Every piece is fingerprinted so the server can confirm it arrived correctly.',
+        'Uploaded chunks are tracked, which helps avoid duplicate work and supports recovery.',
+        'The server stores each accepted part until the full file is ready to be assembled.',
+      ],
+    },
+    {
+      id: 'finalizing',
+      label: 'Verify and finish',
+      description: 'The backend rebuilds the final file and verifies that nothing was corrupted.',
+      details: [
+        'Once all chunks arrive, the backend combines them back into the original file.',
+        'A final file check confirms the rebuilt file matches what was selected on your device.',
+        'Temporary chunk data is cleaned up after a successful completion.',
+      ],
+    },
+    {
+      id: 'completed',
+      label: 'Ready',
+      description: 'The file is uploaded and the flow is complete.',
+      details: [
+        'The completed file is now available on the server.',
+        'Upload tracking is marked as finished and temporary upload data is cleared away.',
+        'From the user perspective, this is the end of the upload journey.',
+      ],
+    },
+  ];
 
-  uploadId: string | null = null;
-  totalChunks: number = 0;
+  readonly selectedFileName = computed(() => this.selectedFile()?.name ?? 'No file selected');
+  readonly selectedFileSize = computed(() => this.formatBytes(this.selectedFile()?.size ?? 0));
+  readonly progressPercentage = computed(() => {
+    const total = this.totalChunks();
+    if (!total) {
+      return this.activeStage() === 'completed' ? 100 : 0;
+    }
+
+    return Math.round((this.uploadedChunks() / total) * 100);
+  });
+
+  readonly completedStageCount = computed(() => {
+    const stageOrder: UploadStageId[] = [
+      'idle',
+      'preparing',
+      'initializing',
+      'uploading',
+      'finalizing',
+      'completed',
+    ];
+    const currentIndex = stageOrder.indexOf(this.activeStage());
+
+    return Math.max(currentIndex - 1, 0);
+  });
 
   constructor(private http: HttpClient) {}
 
-  onFileSelected(event: any) {
-    this.selectedFile = event.target.files[0];
-    console.log('File selected:', this.selectedFile);
+  onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+
+    this.selectedFile.set(file);
+    this.resetUploadState();
+
+    if (file) {
+      this.expandedStage.set('preparing');
+      this.stageMessage.set(`Selected ${file.name}. Ready to upload.`);
+    }
   }
 
-  splitFile() {
-    if (!this.selectedFile) {
-      console.log('No file selected');
+  async startUpload() {
+    const file = this.selectedFile();
+    if (!file || this.isUploading()) {
       return;
     }
 
-    const chunks = this.createChunks(this.selectedFile);
-    console.log('Chunks:', chunks);
+    this.resetUploadState();
+    this.isUploading.set(true);
+    this.errorMessage.set('');
+
+    try {
+      this.activeStage.set('preparing');
+      this.expandedStage.set('preparing');
+      this.stageMessage.set('Preparing file and calculating chunk plan...');
+      const initialChunks = this.createChunks(file, this.chunkSize());
+      this.totalChunks.set(initialChunks.length);
+
+      this.activeStage.set('initializing');
+      this.expandedStage.set('initializing');
+      this.stageMessage.set('Creating an upload session...');
+      const initResponse = await this.initUpload(file);
+
+      this.uploadId.set(initResponse.uploadId);
+      this.chunkSize.set(initResponse.chunkSize);
+      this.totalChunks.set(initResponse.totalChunks);
+
+      const chunks = this.createChunks(file, initResponse.chunkSize);
+
+      this.activeStage.set('uploading');
+      this.expandedStage.set('uploading');
+      this.stageMessage.set('Uploading chunks and validating each part...');
+      for (const chunk of chunks) {
+        await this.uploadChunk(chunk);
+        this.uploadedChunks.set(chunk.index + 1);
+        this.stageMessage.set(
+          `Uploaded chunk ${chunk.index + 1} of ${chunks.length}. Processing continues...`,
+        );
+      }
+
+      this.activeStage.set('finalizing');
+      this.expandedStage.set('finalizing');
+      this.stageMessage.set('Finalizing upload and verifying the full file hash...');
+      await this.completeUpload(file);
+
+      this.activeStage.set('completed');
+      this.expandedStage.set('completed');
+      this.stageMessage.set('Upload completed successfully. Your file is ready.');
+    } catch (error) {
+      console.error(error);
+      this.errorMessage.set('Upload failed. Please try again.');
+      this.stageMessage.set('Something went wrong while processing the file.');
+    } finally {
+      this.isUploading.set(false);
+    }
   }
 
-  createChunks(file: File) {
-    const chunks = [];
+  private resetUploadState() {
+    this.uploadId.set(null);
+    this.totalChunks.set(0);
+    this.uploadedChunks.set(0);
+    this.activeStage.set('idle');
+    this.errorMessage.set('');
+  }
+
+  private createChunks(file: File, chunkSize: number): Chunk[] {
+    const chunks: Chunk[] = [];
     let start = 0;
     let index = 0;
 
     while (start < file.size) {
-      const end = Math.min(start + this.chunkSize, file.size);
-      const blob = file.slice(start, end);
-
+      const end = Math.min(start + chunkSize, file.size);
       chunks.push({
         index,
-        blob,
+        blob: file.slice(start, end),
       });
 
       start = end;
@@ -56,94 +212,114 @@ export class App {
     return chunks;
   }
 
-  initUpload() {
-    if (!this.selectedFile) return;
-
-    const body = {
-      fileName: this.selectedFile.name,
-      fileSize: this.selectedFile.size,
-    };
-
-    this.http.post<any>('http://localhost:8080/upload/init', body).subscribe({
-      next: (res) => {
-        console.log('Upload initialized:', res);
-
-        // store for later
-        this.uploadId = res.uploadId;
-        this.chunkSize = res.chunkSize;
-        this.totalChunks = res.totalChunks;
-      },
-      error: (err) => {
-        console.error('Init failed:', err);
-      },
+  private initUpload(file: File): Promise<{ uploadId: string; chunkSize: number; totalChunks: number }> {
+    return new Promise((resolve, reject) => {
+      this.http
+        .post<{ uploadId: string; chunkSize: number; totalChunks: number }>(
+          'http://localhost:8080/upload/init',
+          {
+            fileName: file.name,
+            fileSize: file.size,
+          },
+        )
+        .subscribe({
+          next: (response) => resolve(response),
+          error: (error) => reject(error),
+        });
     });
   }
 
-  async sha256(blob: Blob): Promise<string> {
+  private async sha256(blob: Blob): Promise<string> {
     const buffer = await blob.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-
     const hashArray = Array.from(new Uint8Array(hashBuffer));
 
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    return hashArray.map((byte) => byte.toString(16).padStart(2, '0')).join('');
   }
 
-  uploadChunk(chunk: any): Promise<void> {
+  private uploadChunk(chunk: Chunk): Promise<void> {
     return new Promise(async (resolve, reject) => {
-      if (!this.uploadId) return reject();
+      const uploadId = this.uploadId();
 
-      const hash = await this.sha256(chunk.blob);
+      if (!uploadId) {
+        reject(new Error('Upload session not initialized.'));
+        return;
+      }
 
-      const headers = {
-        uploadId: this.uploadId!,
-        chunkIndex: chunk.index.toString(),
-        chunkHash: hash,
-      };
+      try {
+        const hash = await this.sha256(chunk.blob);
 
-      this.http.put('http://localhost:8080/upload/chunk', chunk.blob, { headers }).subscribe({
-        next: () => {
-          console.log(`Chunk ${chunk.index} uploaded`);
-          resolve();
-        },
-        error: (err) => {
-          console.error(`Chunk ${chunk.index} failed`, err);
-          reject(err);
-        },
-      });
+        this.http
+          .put('http://localhost:8080/upload/chunk', chunk.blob, {
+            headers: {
+              uploadId,
+              chunkIndex: chunk.index.toString(),
+              chunkHash: hash,
+            },
+          })
+          .subscribe({
+            next: () => resolve(),
+            error: (error) => reject(error),
+          });
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 
-  async uploadAllChunks() {
-    if (!this.selectedFile) return;
-
-    const chunks = this.createChunks(this.selectedFile);
-
-    for (const chunk of chunks) {
-      await this.uploadChunk(chunk);
+  private async completeUpload(file: File): Promise<void> {
+    const uploadId = this.uploadId();
+    if (!uploadId) {
+      throw new Error('Missing upload session.');
     }
+
+    const fileHash = await this.sha256(file);
+
+    return new Promise((resolve, reject) => {
+      this.http
+        .post(`http://localhost:8080/upload/complete?uploadId=${uploadId}&fileHash=${fileHash}`, {}, {
+          responseType: 'text',
+        })
+        .subscribe({
+          next: () => resolve(),
+          error: (error) => reject(error),
+        });
+    });
   }
 
-  async completeUpload() {
-    if (!this.selectedFile || !this.uploadId) return;
+  formatBytes(bytes: number) {
+    if (!bytes) {
+      return '0 B';
+    }
 
-    console.log('Calculating file hash...');
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / 1024 ** unitIndex;
 
-    const fileHash = await this.sha256(this.selectedFile);
+    return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+  }
 
-    console.log('File hash:', fileHash);
+  getStageState(stageId: UploadStageId) {
+    if (this.activeStage() === 'idle') {
+      return 'pending';
+    }
 
-    this.http
-      .post(
-        `http://localhost:8080/upload/complete?uploadId=${this.uploadId}&fileHash=${fileHash}`,
-        {},
-      )
-      .subscribe({
-        next: () => {
-          console.log('Upload completed successfully');
-        },
-        error: (err) => {
-          console.error('Complete failed', err);
-        },
-      });
+    const orderedStages = this.stages.map((stage) => stage.id);
+    const currentIndex = orderedStages.indexOf(this.activeStage());
+    const stageIndex = orderedStages.indexOf(stageId);
+
+    if (stageId === this.activeStage()) {
+      return 'active';
+    }
+
+    if (currentIndex > stageIndex || this.activeStage() === 'completed') {
+      return 'complete';
+    }
+
+    return 'pending';
+  }
+
+  toggleStage(stageId: UploadStageId) {
+    this.expandedStage.set(this.expandedStage() === stageId ? null : stageId);
   }
 }
