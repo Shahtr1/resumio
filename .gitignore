@@ -41,4 +41,5 @@ build/
 .vscode/
 
 backend/uploads/
+uploads/
 *.log
