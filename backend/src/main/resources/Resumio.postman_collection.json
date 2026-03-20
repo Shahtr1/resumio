@@ -1,0 +1,421 @@
+{
+  "info": {
+    "_postman_id": "b8c2269c-0b66-4324-952b-a1bd9ea2fa46",
+    "name": "Resumio",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "5900518"
+  },
+  "item": [
+    {
+      "name": "Init Upload",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();\r",
+              "\r",
+              "pm.test(\"Captured uploadId\", () => {\r",
+              "  pm.expect(json).to.have.property(\"uploadId\");\r",
+              "});\r",
+              "\r",
+              "pm.environment.set(\"uploadId\", json.uploadId);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"fileName\": \"test.txt\",\r\n  \"fileSize\": 15728640\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/upload/init",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "upload",
+            "init"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Upload Chunks 0",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Ensure we're working with raw text body\r",
+              "if (!pm.request.body || pm.request.body.mode !== 'raw') {\r",
+              "    console.warn(\"Body is not raw. Hash will be empty.\");\r",
+              "    pm.variables.set('chunkHash', '');\r",
+              "    return;\r",
+              "}\r",
+              "\r",
+              "// Get exact body string\r",
+              "let body = pm.request.body.raw || '';\r",
+              "\r",
+              "// IMPORTANT: normalize line endings (prevents subtle mismatches)\r",
+              "body = body.replace(/\\r\\n/g, '\\n');\r",
+              "\r",
+              "// Compute SHA-256 (hex)\r",
+              "let hash = CryptoJS.SHA256(body).toString(CryptoJS.enc.Hex);\r",
+              "\r",
+              "// Store variable for header\r",
+              "pm.variables.set('chunkHash', hash);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "uploadId",
+            "value": "{{uploadId}}",
+            "type": "text"
+          },
+          {
+            "key": "chunkIndex",
+            "value": "0",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/octet-stream",
+            "type": "text"
+          },
+          {
+            "key": "chunkHash",
+            "value": "{{chunkHash}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "Hello",
+          "options": {
+            "raw": {
+              "language": "text"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/upload/chunk",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "upload",
+            "chunk"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Upload Chunks 1",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Ensure we're working with raw text body\r",
+              "if (!pm.request.body || pm.request.body.mode !== 'raw') {\r",
+              "    console.warn(\"Body is not raw. Hash will be empty.\");\r",
+              "    pm.variables.set('chunkHash', '');\r",
+              "    return;\r",
+              "}\r",
+              "\r",
+              "// Get exact body string\r",
+              "let body = pm.request.body.raw || '';\r",
+              "\r",
+              "// IMPORTANT: normalize line endings (prevents subtle mismatches)\r",
+              "body = body.replace(/\\r\\n/g, '\\n');\r",
+              "\r",
+              "// Compute SHA-256 (hex)\r",
+              "let hash = CryptoJS.SHA256(body).toString(CryptoJS.enc.Hex);\r",
+              "\r",
+              "// Store variable for header\r",
+              "pm.variables.set('chunkHash', hash);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "uploadId",
+            "value": "{{uploadId}}",
+            "type": "text"
+          },
+          {
+            "key": "chunkIndex",
+            "value": "1",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/octet-stream",
+            "type": "text"
+          },
+          {
+            "key": "chunkHash",
+            "value": "{{chunkHash}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "World",
+          "options": {
+            "raw": {
+              "language": "text"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/upload/chunk",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "upload",
+            "chunk"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Upload Chunks 2",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Ensure we're working with raw text body\r",
+              "if (!pm.request.body || pm.request.body.mode !== 'raw') {\r",
+              "    console.warn(\"Body is not raw. Hash will be empty.\");\r",
+              "    pm.variables.set('chunkHash', '');\r",
+              "    return;\r",
+              "}\r",
+              "\r",
+              "// Get exact body string\r",
+              "let body = pm.request.body.raw || '';\r",
+              "\r",
+              "// IMPORTANT: normalize line endings (prevents subtle mismatches)\r",
+              "body = body.replace(/\\r\\n/g, '\\n');\r",
+              "\r",
+              "// Compute SHA-256 (hex)\r",
+              "let hash = CryptoJS.SHA256(body).toString(CryptoJS.enc.Hex);\r",
+              "\r",
+              "// Store variable for header\r",
+              "pm.variables.set('chunkHash', hash);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "uploadId",
+            "value": "{{uploadId}}",
+            "type": "text"
+          },
+          {
+            "key": "chunkIndex",
+            "value": "2",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/octet-stream",
+            "type": "text"
+          },
+          {
+            "key": "chunkHash",
+            "value": "{{chunkHash}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "!!!",
+          "options": {
+            "raw": {
+              "language": "text"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/upload/chunk",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "upload",
+            "chunk"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Verify Status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/upload/status/{{uploadId}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "upload",
+            "status",
+            "{{uploadId}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Complete Upload",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Ensure we're working with raw text body\r",
+              "if (!pm.request.body || pm.request.body.mode !== 'raw') {\r",
+              "    console.warn(\"Body is not raw. Hash will be empty.\");\r",
+              "    pm.variables.set('chunkHash', '');\r",
+              "    return;\r",
+              "}\r",
+              "\r",
+              "// Get exact body string\r",
+              "let body = pm.request.body.raw || '';\r",
+              "\r",
+              "// IMPORTANT: normalize line endings (prevents subtle mismatches)\r",
+              "body = body.replace(/\\r\\n/g, '\\n');\r",
+              "\r",
+              "// Compute SHA-256 (hex)\r",
+              "let hash = CryptoJS.SHA256(body).toString(CryptoJS.enc.Hex);\r",
+              "\r",
+              "// Store variable for header\r",
+              "pm.variables.set('chunkHash', hash);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "HelloWorld!!!",
+          "options": {
+            "raw": {
+              "language": "text"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/upload/complete?uploadId={{uploadId}}&fileHash={{chunkHash}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "upload",
+            "complete"
+          ],
+          "query": [
+            {
+              "key": "uploadId",
+              "value": "{{uploadId}}"
+            },
+            {
+              "key": "fileHash",
+              "value": "{{chunkHash}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
