@@ -1,0 +1,9 @@
+<h1>{{ title() }}</h1>
+
+<input type="file" (change)="onFileSelected($event)" />
+<br /><br />
+<button (click)="splitFile()">Split File</button>
+<button (click)="initUpload()">Init Upload</button>
+
+<button (click)="uploadAllChunks()">Upload Chunks</button>
+<button (click)="completeUpload()">Complete Upload</button>
