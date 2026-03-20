@@ -1,8 +1,16 @@
 HELP.md
-target/
-.mvn/wrapper/maven-wrapper.jar
+
+### Backend / Maven ###
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+### Frontend / Angular ###
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/coverage/
 
 ### STS ###
 .apt_generated
@@ -32,5 +40,5 @@ build/
 ### VS Code ###
 .vscode/
 
-uploads/
+backend/uploads/
 *.log
